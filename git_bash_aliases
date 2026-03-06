@@ -1,0 +1,16 @@
+source /usr/share/bash-completion/completions/git
+
+alias g='git'
+__git_complete g git
+
+alias ga='git add'
+__git_complete ga git_add
+
+alias gau='git add -u'
+__git_complete gau git_add
+
+alias gl='git log'
+__git_complete gl git_log
+
+alias gs='git status'
+__git_complete gs git_status

@@ -29,6 +29,10 @@ alias glg='git log --grep'
 __git_complete gl _git_log
 alias glp='git log -p'
 __git_complete glp _git_log
+alias gln='git log --name-status'
+__git_complete gln _git_log
+alias gln1='git log --name-status -1'
+__git_complete gln1 _git_log
 alias glo='git log --oneline'
 __git_complete glo _git_log
 alias glop='git log --pretty="%Cred%h %Cgreen%an %C(yellow)%d %Creset%s"'

@@ -1,0 +1,126 @@
+# Header cache, to speed things up.
+set header_cache = "~/.cache/neomutt/headers"
+set message_cachedir = "~/.cache/neomutt/bodies"
+# 
+#For conversation grouping
+set use_threads=threads
+set sort=reverse-last-date-received
+set sort_aux=reverse-last-date-received
+set narrow_tree = yes
+set search_context = 3
+
+# pager index on same sreen
+set pager_index_lines=10
+set pager_context = 1
+set pager_stop = yes
+color tree cyan default
+
+# scroll inbox instead of page by page
+set menu_scroll
+
+#timeout
+set timeout=5
+
+set pipe_decode=no
+set pipe_split=yes
+
+# sidebar
+source ~/.mutt/mailboxes
+
+set mail_check_stats = yes
+
+# sidebar show read/unread
+set sidebar_format = '%B%?F? [%F]?%* %?N?%N/?%S'
+# 
+set sidebar_short_path=yes
+set sidebar_folder_indent=yes
+
+#Message index display
+set index_format="%4C %Z %{%d.%b.%y %H:%M} %-15.15n (%?l?%4l&%4c?) %s"
+
+#shows header in pager view
+unignore message-id
+ignore x-mailer
+
+# show header in vim during compose (you can edit there as well)
+set edit_headers = yes
+
+# Patch syntax highlighting (somewhere from internet)
+color   normal  white           default
+color   body    brightwhite     default         ^[[:space:]].*
+color   body    yellow          default         ^(diff).*
+color   body    cyan            default         ^(Signed-off-by).*
+color   body    cyan            default         ^(Docker-DCO-1.1-Signed-off-by).*
+color   body    brightwhite     default         ^(Cc)
+color   body    yellow          default         "^diff \-.*"
+color   body    brightwhite     default         "^index [a-f0-9].*"
+color   body    brightblue      default         "^---$"
+color   body    white           default         "^\-\-\- .*"
+color   body    white           default         "^[\+]{3} .*"
+color   body    green           default         "^[\+][^\+]+.*"
+color   body    red             default         "^\-[^\-]+.*"
+color   body    brightblue      default         "^@@ .*"
+color   body    green           default         "LGTM"
+color   body    brightmagenta   default         "-- Commit Summary --"
+color   body    brightmagenta   default         "-- File Changes --"
+color   body    brightmagenta   default         "-- Patch Links --"
+color   body    green           default         "^Merged #.*"
+color   body    red             default         "^Closed #.*"
+color   body    brightblue      default         "^Reply to this email.*"
+
+color tilde      default  default
+color signature  color243 default
+color hdrdefault cyan     default
+color header     red      default "^Subject:"
+color header     color214 default "^Message-ID:"
+
+color index color243    default "~P"                   # Messages FROM me
+color index brightwhite default "(~N | ~O) ~t vipinsh" # Unread Messages TO me
+color index green       default "!(~N|~O) ~t vipinsh"  # Read Messages TO me
+color index color33     default "~T"                   # Tagged
+
+# --- Column Colors (not FROM me or sent TO me)
+color index_number  color208 default "!(~T | ~P | ~t vipinsh)"  # Message number (Orange)
+color index_flags   color167 default "!(~T | ~P | ~t vipinsh)"  # Status flags (Red)
+color index_date    color175 default "!(~T | ~P | ~t vipinsh)"  # The Date field (Purple)
+color index_author  color214 default "!(~T | ~P | ~t vipinsh)"  # The Sender (Bright Orange)
+color index_subject color223 default "!(~T | ~P | ~t vipinsh)"  # The Subject (Cream)
+color index_size    color109 default "!(~T | ~P | ~t vipinsh)"  # The Line/Size count (Blue)
+
+color indicator default black
+
+## Thread lines (the "tree")
+color tree              color243 default   # Gray connectors
+color sidebar_divider color243 default
+color sidebar_highlight black color208
+color quoted      color142  default # Level 1: Green (The most recent quote)
+color quoted1     color108  default # Level 2: Aqua/Cyan
+color quoted2     color214  default # Level 3: Yellow/Orange
+color quoted3     color109  default # Level 4: Blue
+color quoted4     color167  default # Level 5: Red
+color quoted5     color175  default # Level 6: Purple
+color quoted6     color142  default # Level 7: Green (Loops back)
+
+color status color214 color235
+
+# Bind keys
+bind pager p noop
+bind index <space> collapse-thread
+bind index V collapse-all
+bind index,pager N search-opposite
+bind index,pager \CK sidebar-prev		# Move the highlight to the previous mailbox
+bind index,pager \CJ sidebar-next		# Move the highlight to the next mailbox
+bind index,pager \CO sidebar-open		# Open the highlighted mailbox
+bind index,pager B sidebar-toggle-visible	# Toggle the visibility of the Sidebar.
+bind pager j next-line				# Move line by line like vim
+bind pager k previous-line			# Move line by line like vim
+
+# Macros
+macro index,pager S "| ~/mutt_save_cat.sh<enter>" "Save mail as a file"
+macro index c "<change-folder>?" "Move current emial to top of the screen"
+macro index ,d "<enter-command>set sort_aux=reverse-last-date-received<enter>" "Sort by newest activity"
+macro pager ,n "<search>^^[^>]<enter>" "Jump to next non-quoted line"
+macro index ,s "<enter-command>set sort_aux=subject<enter>" "Sort by subject"
+macro index ,t "<enter-command>exec current-top<enter>" "Move current emial to top of the screen"
+macro pager \Cf "<enter-command>toggle pager_index_lines<enter>" "Toggle pager_index_line"
+macro index \Cv "<enter-command>exec limit-current-thread<enter>" "Show only current thread & subthreads"

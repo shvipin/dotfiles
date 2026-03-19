@@ -69,3 +69,11 @@ function gwa() {
 	git worktree add -b "$1" ../"$1" "$2"
 }
 
+function cds() {
+	local TEST_DIR=
+	if [[ -n $1 ]]; then
+		TEST_DIR="$1"
+	fi
+
+	cd $(git root)/tools/testing/selftests/"$TEST_DIR"
+}

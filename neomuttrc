@@ -36,7 +36,7 @@ set sidebar_short_path=yes
 set sidebar_folder_indent=yes
 
 #Message index display
-set index_format="%4C %Z %{%d.%b.%y %H:%M} %-15.15n (%?l?%4l&%4c?) %s"
+set index_format="%4C %Z %{%d.%b.%y %H:%M} %-15.15n %?M?(%M)? %s"
 
 #shows header in pager view
 unignore message-id
@@ -44,6 +44,12 @@ ignore x-mailer
 
 # show header in vim during compose (you can edit there as well)
 set edit_headers = yes
+
+#history
+set history = 500
+set history_file = ~/.cache/neomutt/history
+set save_history = 500
+set history_remove_dups = yes
 
 # Patch syntax highlighting (somewhere from internet)
 color   normal  white           default
@@ -87,7 +93,7 @@ color index_author  color214 default "!(~T | ~P | ~t vipinsh)"  # The Sender (Br
 color index_subject color223 default "!(~T | ~P | ~t vipinsh)"  # The Subject (Cream)
 color index_size    color109 default "!(~T | ~P | ~t vipinsh)"  # The Line/Size count (Blue)
 
-color indicator default black
+color indicator black color208
 
 ## Thread lines (the "tree")
 color tree              color243 default   # Gray connectors
@@ -124,3 +130,4 @@ macro index ,s "<enter-command>set sort_aux=subject<enter>" "Sort by subject"
 macro index ,t "<enter-command>exec current-top<enter>" "Move current emial to top of the screen"
 macro pager \Cf "<enter-command>toggle pager_index_lines<enter>" "Toggle pager_index_line"
 macro index \Cv "<enter-command>exec limit-current-thread<enter>" "Show only current thread & subthreads"
+

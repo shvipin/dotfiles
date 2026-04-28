@@ -46,9 +46,11 @@ alias grc='git rebase --continue'
 __git_complete grc _git_rebase
 alias gri='git rebase -i'
 __git_complete gri _git_rebase
+alias grstf='git reset --hard FETCH_HEAD'
 alias gs='git status'
 alias gst='git stash'
 alias gsa='git stash apply'
 gsh() { git show HEAD"$1"; }
 gsha() { git show "$1"; }
-gwa() { git worktree add "../$1"; }
+gwa() { git worktree add -b "$1" "../$1" HEAD; }
+

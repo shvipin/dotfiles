@@ -10,6 +10,7 @@ alias snpr="sudo ${DOTFILE_DIR}/snapshot.sh root"
 
 source ${DOTFILE_DIR}/git_bash_aliases
 
+alias cddot='cd ${DOTFILE_DIR}'
 alias cdk='cd $(git root)/tools/testing/selftests/kvm'
 alias cdl='cd $(git root)/tools/testing/selftests/liveupdate'
 alias cdv='cd $(git root)/tools/testing/selftests/vfio'

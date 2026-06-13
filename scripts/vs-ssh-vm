@@ -5,7 +5,7 @@ SCRIPT_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
 # Defaults
 SSH_KEY="$SCRIPT_DIR/id_testvm_passwordless"
 SSH_PORT="2222"
-
+VM_IP="127.0.0.1"
 usage() {
     echo "Usage: $0 [-k <ssh_key_private>] [-p <port>] [command...]"
     exit 1
@@ -24,12 +24,20 @@ shift $((OPTIND - 1))
 
 # Expand tilde in SSH_KEY path safely
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
+SSH_OPTS="-F /dev/null \
+	  -o IdentityAgent=none \
+	  -o NoHostAuthenticationForLocalhost=yes \
+	  -o StrictHostKeyChecking=no \
+	  -o BatchMode=yes \
+	  -o IdentitiesOnly=yes \
+	  -i $SSH_KEY \
+	  -p $SSH_PORT"
+
 
 # Enforce strict permissions on private key (required by SSH)
 if [ -f "$SSH_KEY" ]; then
     chmod 600 "$SSH_KEY" 2>/dev/null || true
 fi
 
-ssh -i "$SSH_KEY" -o NoHostAuthenticationForLocalhost=yes -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -p "$SSH_PORT" root@127.0.0.1 "$@"
-
+env -u SSH_AUTH_SOCK ssh $SSH_OPTS root@$VM_IP "$@"
 

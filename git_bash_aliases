@@ -1,4 +1,9 @@
-source /usr/share/bash-completion/completions/git
+for path in "/usr/share/bash-completion/completions/git" "/etc/bash_completion.d/git"; do
+    if [ -f "$path" ]; then
+        source "$path"
+        break
+    fi
+done
 alias ga='git add'
 alias gaa='git add -A'
 alias gau='git add -u'
@@ -15,6 +20,7 @@ alias gcans='git commit --amend --no-edit -s'
 alias gck='git checkout'
 __git_complete gck _git_checkout
 alias gcp='git cherry-pick'
+__git_complete gcp _git_cherry_pick
 alias gcpa='git cherry-pick --abort'
 alias gcpc='git cherry-pick --continue'
 alias gd='git diff'
@@ -26,17 +32,17 @@ __git_complete gl _git_log
 alias gl1='git log -1'
 __git_complete gl1 _git_log
 alias glg='git log --grep'
-__git_complete gl _git_log
+__git_complete glg _git_log
 alias glp='git log -p'
 __git_complete glp _git_log
+alias glpr='git log -p --reverse'
+__git_complete glpr _git_log
 alias gln='git log --name-status'
 __git_complete gln _git_log
 alias gln1='git log --name-status -1'
 __git_complete gln1 _git_log
-alias glo='git log --oneline'
+alias glo='git log --pretty="%C(red)%h%Creset %C(green)%<(15,trunc)%an%Creset %C(yellow)%d%Creset %s"'
 __git_complete glo _git_log
-alias glop='git log --pretty="%Cred%h %Cgreen%an %C(yellow)%d %Creset%s"'
-__git_complete glop _git_log
 alias gpr='git pull --rebase'
 alias gr='git rebase'
 __git_complete gr _git_rebase
@@ -52,5 +58,6 @@ alias gst='git stash'
 alias gsa='git stash apply'
 gsh() { git show HEAD"$1"; }
 gsha() { git show "$1"; }
+__git_complete gsha _git_show
 gwa() { git worktree add -b "$1" "../$1" HEAD; }
 

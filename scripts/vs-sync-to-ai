@@ -1,0 +1,100 @@
+#!/bin/bash
+set -e
+
+# Parse command line arguments for force flag
+FORCE=false
+if [ "$1" = "-f" ] || [ "$1" = "--force" ]; then
+    FORCE=true
+fi
+
+# 1. Get branch name (handles interactive/standard rebase & standard work)
+CURRENT_BRANCH=$(git branch --show-current)
+if [ -z "$CURRENT_BRANCH" ]; then
+    GIT_DIR=$(git rev-parse --git-dir)
+    if [ -f "$GIT_DIR/rebase-merge/head-name" ]; then
+        CURRENT_BRANCH=$(sed 's|^refs/heads/||' "$GIT_DIR/rebase-merge/head-name")
+    elif [ -f "$GIT_DIR/rebase-apply/head-name" ]; then
+        CURRENT_BRANCH=$(sed 's|^refs/heads/||' "$GIT_DIR/rebase-apply/head-name")
+    fi
+fi
+
+if [ -z "$CURRENT_BRANCH" ]; then
+    echo "❌ Error: Could not detect branch name. Are you in a detached HEAD?"
+    exit 1
+fi
+
+AI_BRANCH="ai_${CURRENT_BRANCH}"
+WORKTREE_PATH="../${AI_BRANCH}"
+CURRENT_HEAD=$(git rev-parse HEAD)
+
+# 2. If no worktree exists yet, initialize it
+if [ ! -d "$WORKTREE_PATH" ]; then
+    echo "🏗️  Creating new AI worktree..."
+    git branch -f "$AI_BRANCH" "$CURRENT_HEAD"
+    git worktree add "$WORKTREE_PATH" "$AI_BRANCH"
+    echo "✅ Done! Worktree created at: $WORKTREE_PATH"
+    exit 0
+fi
+
+# 3. Analyze worktree and branch states
+echo "🔍 Checking AI worktree status at ${WORKTREE_PATH} and ai branch ${AI_BRANCH}"
+ORIGINAL_DIR=$(pwd)
+cd "$WORKTREE_PATH"
+
+DIRTY_CHANGES=$(git status --porcelain)
+AI_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+
+cd "$ORIGINAL_DIR"
+
+# Count commits on the AI branch that do not exist on our development HEAD
+UNMERGED_COUNT=0
+if [ -n "$AI_HEAD" ]; then
+    UNMERGED_COUNT=$(git rev-list --count "$CURRENT_HEAD..$AI_HEAD")
+fi
+
+# 4. Safety Guard checks
+SHOULD_FAIL=false
+REASON=""
+
+if [ -n "$DIRTY_CHANGES" ]; then
+    SHOULD_FAIL=true
+    REASON="❌ Error: The AI worktree has uncommitted files!"
+elif [ "$UNMERGED_COUNT" -gt 0 ]; then
+    SHOULD_FAIL=true
+    REASON="❌ Error: The AI branch has $UNMERGED_COUNT commit(s) not present in your current branch!"
+fi
+
+if [ "$SHOULD_FAIL" = true ]; then
+    if [ "$FORCE" = false ]; then
+        echo "$REASON"
+        if [ "$UNMERGED_COUNT" -gt 0 ]; then
+            echo "These AI commits would be permanently lost:"
+            git log --oneline "$CURRENT_HEAD..$AI_HEAD" | sed 's/^/  - /'
+        fi
+        echo ""
+        echo "If you want to overwrite and destroy these changes, run:"
+        echo "  $0 --force"
+        exit 1
+    else
+        echo "⚠️  Force flag detected. Overwriting uncommitted work/commits in AI worktree..."
+    fi
+fi
+
+# 5. Skip if already in perfect sync
+if [ "$CURRENT_HEAD" = "$AI_HEAD" ] && [ -z "$DIRTY_CHANGES" ]; then
+    echo "✨ AI worktree is already perfectly in sync with HEAD ($CURRENT_HEAD). Skipping."
+    exit 0
+fi
+
+# 6. Execute the Sync
+echo "🔄 Syncing AI worktree to match HEAD ($CURRENT_HEAD)..."
+cd "$WORKTREE_PATH"
+
+# Force checkout the branch (needed if we are overriding dirty files via --force)
+git checkout -f -q "$AI_BRANCH" 2>/dev/null || git checkout -B "$AI_BRANCH"
+
+# Hard reset the files and branch pointer to match our dev workspace
+git reset --hard "$CURRENT_HEAD"
+
+cd "$ORIGINAL_DIR"
+echo "✅ Success! AI worktree is reset and ready."

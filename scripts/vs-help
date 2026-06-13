@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+import os
+import sys
+import re
+import subprocess
+
+def get_cheat_sheet_path():
+    # Script is in dotfiles/scripts/vs-help
+    # Cheat sheet is in dotfiles/CHEAT_SHEET.md
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    return os.path.abspath(os.path.join(script_dir, "..", "CHEAT_SHEET.md"))
+
+def read_cheat_sheet():
+    path = get_cheat_sheet_path()
+    if not os.path.exists(path):
+        print(f"Error: Cheat sheet not found at {path}", file=sys.stderr)
+        sys.exit(1)
+    with open(path, "r") as f:
+        return f.read()
+
+def show_all():
+    path = get_cheat_sheet_path()
+    # Try to use a pager if stdout is a tty
+    if sys.stdout.isatty():
+        pager = os.environ.get("PAGER", "less -R")
+        try:
+            subprocess.run(pager.split() + [path])
+            return
+        except FileNotFoundError:
+            pass
+    
+    # Fallback to printing
+    with open(path, "r") as f:
+        print(f.read())
+
+def search(query):
+    content = read_cheat_sheet()
+    # Split by section header
+    sections = re.split(r"\n##\s+", "\n" + content)
+    
+    query_lower = query.lower()
+    results = []
+    
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        lines = section.split("\n")
+        section_title = lines[0].strip()
+        if section_title.startswith("#"): # Skip main title
+            continue
+        
+        section_matches = []
+        
+        for line in lines[1:]:
+            line_strip = line.strip()
+            if not line_strip:
+                continue
+                
+            if line_strip.startswith("|"):
+                # Table line
+                if "---" in line_strip or "Command | Description" in line_strip:
+                    continue # skip separator and header
+                parts = [p.strip() for p in line_strip.split("|")]
+                if len(parts) >= 3:
+                    command = parts[1]
+                    desc = parts[2]
+                    # Strip markdown formatting for matching
+                    clean_command = re.sub(r"\*\*|`|_", "", command)
+                    clean_desc = re.sub(r"\*\*|`|_", "", desc)
+                    
+                    if query_lower in clean_command.lower() or query_lower in clean_desc.lower():
+                        # Format nicely for terminal
+                        cmd_colored = f"\033[1;32m{command}\033[0m"
+                        section_matches.append(f"  {cmd_colored.ljust(35)} | {desc}")
+            elif line_strip.startswith("*"):
+                # Bullet point
+                clean_line = re.sub(r"\*\*|`|_", "", line_strip)
+                if query_lower in clean_line.lower():
+                    # Highlight the key if it is bolded
+                    match_bold = re.match(r"\*\s+\*\*([^*]+)\*\*:\s*(.*)", line_strip)
+                    if match_bold:
+                        key, desc = match_bold.groups()
+                        key_colored = f"\033[1;32m{key}\033[0m"
+                        section_matches.append(f"  * {key_colored.ljust(25)}: {desc}")
+                    else:
+                        section_matches.append(f"  {line_strip}")
+            elif line_strip.startswith("###"):
+                # Subheader, we can print it if matches follow, but for now we just skip
+                pass
+        
+        if section_matches:
+            results.append((section_title, section_matches))
+            
+    if not results:
+        print(f"No matches found for '{query}'.")
+    else:
+        for title, matches in results:
+            # Clean title markdown
+            clean_title = re.sub(r"[0-9.\s]+", "", title, count=1) # strip number prefix
+            print(f"\n\033[1;34m=== {clean_title} ===\033[0m")
+            for match in matches:
+                print(match)
+        print()
+
+def list_categories():
+    content = read_cheat_sheet()
+    sections = re.split(r"\n##\s+", "\n" + content)
+    print("\n\033[1;34mAvailable Categories:\033[0m")
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        lines = section.split("\n")
+        title = lines[0].strip()
+        if title.startswith("#") or "table of contents" in title.lower():
+            continue
+        clean_title = re.sub(r"[0-9.\s]+", "", title, count=1)
+        print(f"  - {clean_title}")
+    print("\n\033[3mTip: You can search using any of these category names (e.g., 'dh git' or 'dh vm')\033[0m\n")
+
+def list_commands():
+    content = read_cheat_sheet()
+    sections = re.split(r"\n##\s+", "\n" + content)
+    print("\n\033[1;34mAll Available Commands & Aliases:\033[0m")
+    
+    commands = []
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        lines = section.split("\n")
+        title = lines[0].strip()
+        if title.startswith("#") or "table of contents" in title.lower():
+            continue
+            
+        for line in lines[1:]:
+            line_strip = line.strip()
+            if not line_strip:
+                continue
+            if line_strip.startswith("|"):
+                if "---" in line_strip or "Command | Description" in line_strip:
+                    continue
+                parts = [p.strip() for p in line_strip.split("|")]
+                if len(parts) >= 2:
+                    cmd = re.sub(r"\*\*|`|_", "", parts[1])
+                    commands.append(cmd)
+            elif line_strip.startswith("*"):
+                match_bold = re.match(r"\*\s+\*\*([^*]+)\*\*:\s*(.*)", line_strip)
+                if match_bold:
+                    key, _ = match_bold.groups()
+                    commands.append(key)
+                    
+    # Print them in a nice grid
+    commands = sorted(list(set(commands)))
+    col_width = max(len(c) for c in commands) + 3
+    cols = 4
+    for i in range(0, len(commands), cols):
+        row = commands[i:i+cols]
+        print("  " + "".join(c.ljust(col_width) for c in row))
+    print()
+
+def main():
+    if len(sys.argv) > 1:
+        arg = sys.argv[1]
+        if arg in ("-h", "--help"):
+            print("Usage:")
+            print("  vs-help                  - Show the entire cheat sheet (uses pager if possible)")
+            print("  vs-help -c|--categories  - List all available categories")
+            print("  vs-help -l|--list        - List all available command/alias shortcuts")
+            print("  vs-help <query>          - Free-text search for aliases, commands, or descriptions")
+            sys.exit(0)
+        elif arg in ("-c", "--categories"):
+            list_categories()
+        elif arg in ("-l", "--list", "--commands"):
+            list_commands()
+        else:
+            query = " ".join(sys.argv[1:])
+            search(query)
+    else:
+        show_all()
+
+if __name__ == "__main__":
+    main()

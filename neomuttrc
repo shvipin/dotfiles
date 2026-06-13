@@ -1,6 +1,6 @@
 # Header cache, to speed things up.
-set header_cache = "~/.cache/neomutt/headers"
-set message_cachedir = "~/.cache/neomutt/bodies"
+set header_cache = "$HOME/.cache/neomutt/headers"
+set message_cachedir = "$HOME/.cache/neomutt/bodies"
 # 
 #For conversation grouping
 set use_threads=threads
@@ -24,8 +24,11 @@ set timeout=5
 set pipe_decode=no
 set pipe_split=yes
 
+# Source local credentials and private overrides if they exist
+source "cat $HOME/.config/neomutt/credentials 2>/dev/null |"
+
 # sidebar
-source ~/.mutt/mailboxes
+source $HOME/.mutt/mailboxes
 
 set mail_check_stats = yes
 
@@ -124,10 +127,12 @@ bind pager k previous-line			# Move line by line like vim
 # Macros
 macro index,pager S "| ~/mutt_save_cat.sh<enter>" "Save mail as a file"
 macro index c "<change-folder>?" "Move current emial to top of the screen"
-macro index ,d "<enter-command>set sort_aux=reverse-last-date-received<enter>" "Sort by newest activity"
+macro index ,d "<enter-command>set sort_aux=reverse-last-date<enter>" "Sort by newest activity (helps in mbox from b4)"
 macro pager ,n "<search>^^[^>]<enter>" "Jump to next non-quoted line"
+macro index ,r "<enter-command>set sort_aux=reverse-last-date-received<enter>" "Sort by newest activity"
 macro index ,s "<enter-command>set sort_aux=subject<enter>" "Sort by subject"
 macro index ,t "<enter-command>exec current-top<enter>" "Move current emial to top of the screen"
 macro pager \Cf "<enter-command>toggle pager_index_lines<enter>" "Toggle pager_index_line"
 macro index \Cv "<enter-command>exec limit-current-thread<enter>" "Show only current thread & subthreads"
+
 

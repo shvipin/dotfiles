@@ -1,0 +1,49 @@
+#!/bin/bash
+# update-mbx.sh - Update an mbox file with the latest messages from lore.kernel.org
+
+set -e
+
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <mbx-file>"
+    exit 1
+fi
+
+MBX_FILE="$1"
+
+if [ ! -f "$MBX_FILE" ]; then
+    echo "Error: File '$MBX_FILE' not found."
+    exit 1
+fi
+
+# Extract Message-ID from the file content
+# Look for the first Message-ID header and strip the '<' and '>'
+MSGID=$(grep -m 1 -i "^Message-ID:" "$MBX_FILE" | sed -E 's/^Message-ID:[[:space:]]*<([^>]+)>.*$/\1/i' | tr -d ' \r\n')
+
+if [ -z "$MSGID" ]; then
+    echo "Error: Could not find Message-ID in '$MBX_FILE'."
+    exit 1
+fi
+
+echo "Updating $MBX_FILE (Extracted Message-ID: $MSGID) ..."
+
+# Create a temporary file for the new mbox content
+NEW_MBX=$(mktemp)
+
+# Use b4 to fetch the latest thread messages from lore
+# -f: filter duplicates
+# -o -: output the mbox to stdout
+if b4 mbox -f -o - "$MSGID" > "$NEW_MBX"; then
+    # Only overwrite the original file if b4 succeeded and we got some content
+    if [ -s "$NEW_MBX" ]; then
+        mv "$NEW_MBX" "$MBX_FILE"
+        echo "Successfully updated $MBX_FILE"
+    else
+        echo "Error: Fetched mbox is empty. Not updating original file."
+        rm -f "$NEW_MBX"
+        exit 1
+    fi
+else
+    echo "Error: Failed to fetch latest messages for $MSGID"
+    rm -f "$NEW_MBX"
+    exit 1
+fi

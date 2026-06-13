@@ -1,0 +1,59 @@
+#!/bin/bash
+
+set -e
+
+SCRIPT_DIR=$(dirname $(realpath ${BASH_SOURCE[0]}))
+
+# Defaults
+IMAGE_NAME="$HOME/.local/share/vs-vm/deb_unstable.ext4"
+IMAGE_SIZE="10G"
+SSH_KEY="$SCRIPT_DIR/id_testvm_passwordless.pub"
+
+usage() {
+    echo "Usage: $0 [-n <image_name>] [-s <image_size>] [-k <ssh_key_pub>]"
+    exit 1
+}
+
+while getopts "n:s:k:" option; do
+    case "$option" in
+        n) IMAGE_NAME="$OPTARG" ;;
+        s) IMAGE_SIZE="$OPTARG" ;;
+        k) SSH_KEY="$OPTARG" ;;
+        :) echo "Error: Option -${OPTARG} requires an argument." >&2; usage ;;
+        ?) echo "Error: Invalid option -${OPTARG}." >&2; usage ;;
+    esac
+done
+
+shift $((OPTIND - 1))
+
+# Expand tilde in SSH_KEY path safely without eval
+SSH_KEY="${SSH_KEY/#\~/$HOME}"
+
+if [ ! -f "$SSH_KEY" ]; then
+    echo "Warning: SSH key $SSH_KEY not found."
+    echo "Please generate it or ensure it exists for passwordless access."
+    echo "Example: ssh-keygen -t ed25519 -N '' -f ${SSH_KEY%.pub}"
+    exit 1
+fi
+
+mkdir -p "$(dirname "$IMAGE_NAME")"
+echo "Creating VM image: $IMAGE_NAME with size $IMAGE_SIZE..."
+
+debvm-create \
+  -k "$SSH_KEY" \
+  -o "$IMAGE_NAME" \
+  -r unstable \
+  -z "$IMAGE_SIZE" \
+  -- \
+  --dpkgopt='path-exclude=/usr/share/man/*' \
+  --dpkgopt='path-exclude=/usr/share/locale/*' \
+  --dpkgopt='path-include=/usr/share/locale/locale.alias' \
+  --dpkgopt='path-exclude=/usr/share/doc/*' \
+  --customize-hook='echo "kernel_modules /lib/modules 9p trans=virtio,version=9p2000.L,nofail,ro 0 0" >> "$1/etc/fstab"' \
+  --customize-hook='echo "host_shared /media/host_shared 9p trans=virtio,version=9p2000.L,nofail,rw 0 0" >> "$1/etc/fstab"' \
+  --customize-hook='mkdir -p "$1/media/host_shared"' \
+  --include='bison,file,flex,less,pciutils,vim,strace,gdb,htop,tmux,curl,wget,kmod,build-essential' \
+  --variant buildd \
+  --quiet
+
+echo "VM image $IMAGE_NAME created successfully."

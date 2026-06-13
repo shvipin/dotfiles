@@ -4,7 +4,7 @@
 # root snapshots are saved in mounted directory /mnt/@snapshots
 # home snapshots are saved in mounted directory /mnt/@home_snapshots
 
-set -euxo pipefail
+set -euo pipefail
 
 ROOT="/"
 ROOT_SNAPSHOT_MNT="/mnt/@snapshots"
@@ -30,7 +30,7 @@ verify_mount() {
 }
 
 snapshot() {
-    sudo btrfs subvolume snapshot -r "$1" "$2"
+    btrfs subvolume snapshot -r "$1" "$2"
 }
 
 sync() {

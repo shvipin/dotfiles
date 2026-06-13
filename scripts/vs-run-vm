@@ -1,0 +1,227 @@
+#!/bin/bash
+
+set -e
+
+KERNEL=""
+KERNEL_MODULES=""
+HOST_SHARED=""
+IMAGE="$HOME/.local/share/vs-vm/deb_unstable.ext4"
+CPUS="4"
+RAM="16G"
+SSH_PORT="2222"
+HUGEPAGES="0"
+IOMMU_TYPE="intel"
+EXTRA_BOOT_ARGS=""
+OVERLAY=0
+
+usage() {
+    echo "Usage: $0 [-o] [-i <image>] [-h <host_shared_dir>] [-k <kernel_bzImage>] [-m <kernel_modules_dir>] [-c <cpus>] [-r <ram>] [-p <port>] [-g <hugepages>] [-t <iommu_type>] [-a <extra_boot_args>] [extra_qemu_args...]"
+    exit 1
+}
+
+while getopts "h:i:k:m:c:r:p:g:t:a:o" option; do
+        case "$option" in
+        h) #host shared
+                HOST_SHARED="$OPTARG"
+                ;;
+        i) #os image
+                IMAGE="$OPTARG"
+                ;;
+        k) #custom kernel
+                KERNEL="$OPTARG"
+                ;;
+        m) #kernel modules
+                KERNEL_MODULES="$OPTARG"
+                ;;
+        c) #cpus
+                CPUS="$OPTARG"
+                ;;
+        r) #ram
+                RAM="$OPTARG"
+                ;;
+        p) #ssh port
+                SSH_PORT="$OPTARG"
+                ;;
+        g) #hugepages
+                HUGEPAGES="$OPTARG"
+                ;;
+        t) #iommu type
+                IOMMU_TYPE="$OPTARG"
+                ;;
+        a) #extra boot args
+                EXTRA_BOOT_ARGS="$OPTARG"
+                ;;
+        o) # overlay copy
+                OVERLAY=1
+                ;;
+        :)
+                echo "Error: Option -${OPTARG} requires an argument." >&2
+                usage
+                ;;
+        ?) # Case for invalid options
+                echo "Error: Invalid option -${OPTARG}." >&2
+                usage
+                ;;
+        esac
+done
+
+shift $((OPTIND - 1))
+
+if [[ -z ${IMAGE} || ! -f ${IMAGE} ]]; then
+        echo "Error: Image file '${IMAGE}' not found."
+        echo "Please create it first using 'vs-create-vm' or specify an existing image with -i."
+        exit 1
+fi
+
+TEMP_IMAGE=""
+cleanup() {
+        if [[ -n "$TEMP_IMAGE" && -f "$TEMP_IMAGE" ]]; then
+                echo "Cleaning up temporary image $TEMP_IMAGE"
+                rm -f "$TEMP_IMAGE"
+        fi
+}
+
+if [[ "$OVERLAY" -eq 1 ]]; then
+        TEMP_IMAGE="${IMAGE%.ext4}.tmp-${SSH_PORT}.ext4"
+        echo "Creating temporary overlay image: $TEMP_IMAGE"
+        cp --reflink=auto --sparse=always "$IMAGE" "$TEMP_IMAGE"
+        IMAGE="$TEMP_IMAGE"
+        trap cleanup EXIT HUP INT TERM QUIT
+else
+        if fuser "$IMAGE" >/dev/null 2>&1; then
+                pid=$(fuser "$IMAGE" 2>/dev/null | xargs)
+                echo "Error: Image '$IMAGE' is currently in use by process $pid."
+                echo "If you want to restart it, please stop the other instance first (e.g., 'kill $pid' or shutdown inside the VM)."
+                echo "If you want to run concurrently, use a different SSH port (-p) and the overlay option (-o)."
+                exit 1
+        fi
+fi
+
+# Resolve default built kernel path if not specified
+git_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+objtree=""
+if [[ -n "$git_root" ]]; then
+        if [[ -n "$KBUILD_OUTPUT" ]]; then
+                if [[ "$KBUILD_OUTPUT" = /* ]]; then
+                        objtree="$KBUILD_OUTPUT"
+                else
+                        objtree="${git_root}/${KBUILD_OUTPUT}"
+                fi
+        else
+                objtree="$git_root"
+        fi
+else
+        if [[ -n "$KBUILD_OUTPUT" ]]; then
+                if [[ "$KBUILD_OUTPUT" = /* ]]; then
+                        objtree="$KBUILD_OUTPUT"
+                else
+                        objtree="${PWD}/${KBUILD_OUTPUT}"
+                fi
+        else
+                objtree="$PWD"
+        fi
+fi
+objtree=$(realpath "$objtree" 2>/dev/null || echo "$objtree")
+default_kernel="${objtree}/arch/x86/boot/bzImage"
+
+if [[ -z ${KERNEL} ]]; then
+        if [[ -f "$default_kernel" ]]; then
+                KERNEL="$default_kernel"
+                echo "Using default built kernel: $KERNEL"
+        fi
+elif [[ "${KERNEL}" == "none" ]]; then
+        KERNEL=""
+fi
+
+if [[ -n ${KERNEL} ]]; then
+        if [[ ! -f ${KERNEL} ]]; then
+                echo "Error: Kernel file '${KERNEL}' not found."
+                exit 1
+        fi
+        set -- -kernel "${KERNEL}" "$@"
+fi
+
+# Resolve default host shared directory if not specified
+if [[ -z ${HOST_SHARED} ]]; then
+        git_root=$(git rev-parse --show-toplevel 2>/dev/null || true)
+        if [[ -n "$git_root" ]]; then
+                HOST_SHARED="$git_root"
+                echo "Sharing Git Root: $HOST_SHARED"
+        else
+                HOST_SHARED="$PWD"
+                echo "Sharing CWD: $HOST_SHARED"
+        fi
+fi
+
+if [[ "$HOST_SHARED" != "none" ]]; then
+        if [[ ! -d ${HOST_SHARED} ]]; then
+                echo "Error: Host shared directory '${HOST_SHARED}' not found."
+                exit 1
+        fi
+        set -- -virtfs local,security_model=none,path="${HOST_SHARED}",mount_tag=host_shared "$@"
+fi
+
+if [[ -n ${KERNEL_MODULES} ]]; then
+        if [[ ! -d ${KERNEL_MODULES} ]]; then
+                echo "Error: Kernel modules directory '${KERNEL_MODULES}' not found."
+                exit 1
+        fi
+        set -- -virtfs local,security_model=none,path="${KERNEL_MODULES}/",mount_tag=kernel_modules "$@"
+fi
+
+# Construct Boot Args
+BOOT_ARGS="liveupdate=on kho=on vfio_iommu_type1.allow_unsafe_interrupts=Y vfio_pci.enable_sriov=Y vfio_pci.disable_denylist=Y"
+QEMU_EXTRA_ARGS=()
+
+if [[ "$IOMMU_TYPE" == "intel" ]]; then
+        BOOT_ARGS="$BOOT_ARGS iommu=pt intel_iommu=on"
+        QEMU_EXTRA_ARGS+=("-device" "intel-iommu,intremap=on,caching-mode=on,device-iotlb=on")
+elif [[ "$IOMMU_TYPE" == "amd" ]]; then
+        BOOT_ARGS="$BOOT_ARGS iommu=pt"
+        QEMU_EXTRA_ARGS+=("-device" "amd-iommu,intremap=on")
+elif [[ "$IOMMU_TYPE" == "none" ]]; then
+        BOOT_ARGS="$BOOT_ARGS iommu=off"
+else
+        echo "Error: Invalid IOMMU type '$IOMMU_TYPE'." >&2
+        usage
+fi
+
+if [[ "$HUGEPAGES" -gt 0 ]]; then
+        BOOT_ARGS="$BOOT_ARGS default_hugepagesz=2M hugepages=$HUGEPAGES"
+fi
+
+if [[ -n "$EXTRA_BOOT_ARGS" ]]; then
+        BOOT_ARGS="$BOOT_ARGS $EXTRA_BOOT_ARGS"
+fi
+
+QEMU_EXTRA_ARGS+=("-smp" "$CPUS")
+
+RUN_CMD=(debvm-run \
+  -i "$IMAGE" \
+  -s "$SSH_PORT" \
+  --append "$BOOT_ARGS" \
+  -- \
+    -m "$RAM" \
+    "${QEMU_EXTRA_ARGS[@]}" \
+    -device pci-testdev \
+    -M q35,accel=kvm,kernel-irqchip=split \
+    -netdev user,id=n,net=10.0.3.0/24 \
+    -netdev user,id=o,net=10.0.4.0/24 \
+    -netdev user,id=p,net=10.0.5.0/24 \
+    -netdev user,id=q,net=10.0.6.0/24 \
+    -netdev user,id=r,net=10.0.7.0/24 \
+    -device pcie-root-port,id=b \
+    -device virtio-net-pci,bus=b,addr=0x0.0x4,netdev=r,sriov-pf=f \
+    -device virtio-net-pci,bus=b,addr=0x0.0x3,netdev=q,sriov-pf=f \
+    -device virtio-net-pci,bus=b,addr=0x0.0x2,netdev=p,sriov-pf=f \
+    -device virtio-net-pci,bus=b,addr=0x0.0x1,netdev=o,sriov-pf=f \
+    -device virtio-net-pci,bus=b,addr=0x0.0x0,netdev=n,id=f \
+    "$@")
+
+if [[ "$OVERLAY" -eq 1 ]]; then
+        "${RUN_CMD[@]}"
+        exit $?
+else
+        exec "${RUN_CMD[@]}"
+fi
+
